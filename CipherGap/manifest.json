@@ -1,0 +1,36 @@
+{
+    "manifest_version": 3,
+    "name": "CipherGap",
+    "version": "1.0",
+    "description": "A Chrome extension providing End-to-End (Client-Side) encryption for Iranian web messengers (Eitaa, Rubika, Bale) using AES.",
+    "permissions": [
+        "storage",
+        "activeTab"
+    ],
+    "host_permissions": [
+        "https://web.rubika.ir/*",
+        "https://web.splus.ir/*",
+        "https://web.bale.ai/*",
+        "https://web.eitaa.com/*"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "https://web.rubika.ir/*",
+                "https://web.splus.ir/*",
+                "https://web.bale.ai/*",
+                "https://web.eitaa.com/*"
+            ],
+            "js": [
+                "content.js"
+            ]
+        }
+    ],
+     "action": {
+      "default_title": "CipherGap",
+      "default_popup": "popup.html"
+    }
+}
