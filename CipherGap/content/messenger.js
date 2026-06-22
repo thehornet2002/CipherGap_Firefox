@@ -2,40 +2,15 @@
 // messenger.js
 
 function messenger_detection() {
+    const adapter = get_active_messenger_adapter();
 
-    const hostname =
-        window.location.hostname;
+    console.log("Detecting messenger:", window.location.hostname);
 
-    console.log(
-        "Detecting messenger:",
-        hostname
-    );
-
-    if (
-        hostname.startsWith(
-            "web.bale.ai"
-        )
-    ) {
-
-        const baleChatInput =
-            document.querySelector(
-                "#editable-message-text"
-            );
-
-        if (baleChatInput) {
-
-            inject_encrypt_button_bale();
-
-            return {
-                detected: true,
-                messenger: "bale",
-                input: baleChatInput
-            };
-        }
-
+    if (adapter) {
+        adapter.inject_ui?.();
         return {
-            detected: false,
-            messenger: "bale"
+            detected: true,
+            messenger: adapter.name
         };
     }
 
@@ -44,4 +19,3 @@ function messenger_detection() {
         messenger: null
     };
 }
-

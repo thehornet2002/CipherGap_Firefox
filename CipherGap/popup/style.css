@@ -414,6 +414,55 @@ body {
     opacity: .95;
 }
 
+.exchange-btn {
+
+    width: 100%;
+
+    border: none;
+
+    border-radius: 14px;
+
+    padding: 14px;
+
+    font-size: 14px;
+
+    font-weight: 600;
+
+    color: white;
+
+    cursor: pointer;
+
+    transition: .25s;
+
+    margin-top: 10px;
+
+    background:
+        linear-gradient(
+            135deg,
+            #059669,
+            #10b981
+        );
+
+    box-shadow:
+        0 10px 30px rgba(16,185,129,.25);
+}
+
+.exchange-btn:hover {
+
+    transform: translateY(-1px);
+
+    opacity: .95;
+}
+
+.exchange-btn:disabled {
+
+    opacity: .5;
+
+    cursor: not-allowed;
+
+    transform: none;
+}
+
 
 /* Status */
 
