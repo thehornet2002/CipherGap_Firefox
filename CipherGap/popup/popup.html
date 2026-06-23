@@ -9,9 +9,7 @@
         name="viewport"
         content="width=device-width, initial-scale=1.0"
     />
-
     <title>CipherGap</title>
-
     <link
         rel="stylesheet"
         href="style.css"
@@ -32,7 +30,6 @@
                 <div class="brand-logo">
                     🔐
                 </div>
-
                 <div>
 
                     <div class="brand-title">
@@ -44,7 +41,6 @@
                     </div>
 
                 </div>
-
             </div>
 
             <div class="version">
@@ -69,21 +65,17 @@
                     <div class="messenger-icon bale">
                         🟦
                     </div>
-
                     <div class="messenger-info">
 
                         <div class="messenger-name">
                             Bale
                         </div>
-
                         <div class="messenger-status online">
                             Active
                         </div>
 
                     </div>
-
                 </div>
-
             </button>
 
 
@@ -98,21 +90,17 @@
                     <div class="messenger-icon rubika">
                         🟩
                     </div>
-
                     <div class="messenger-info">
 
                         <div class="messenger-name">
                             Rubika
                         </div>
-
                         <div class="messenger-status offline">
                             Disabled
                         </div>
 
                     </div>
-
                 </div>
-
             </button>
 
 
@@ -127,21 +115,17 @@
                     <div class="messenger-icon eitaa">
                         🟨
                     </div>
-
                     <div class="messenger-info">
 
                         <div class="messenger-name">
                             Eitaa
                         </div>
-
                         <div class="messenger-status offline">
                             Disabled
                         </div>
 
                     </div>
-
                 </div>
-
             </button>
 
 
@@ -156,21 +140,17 @@
                     <div class="messenger-icon splus">
                         🟪
                     </div>
-
                     <div class="messenger-info">
 
                         <div class="messenger-name">
                             Splus
                         </div>
-
                         <div class="messenger-status offline">
                             Disabled
                         </div>
 
                     </div>
-
                 </div>
-
             </button>
 
         </div>
@@ -206,11 +186,9 @@
                   <span>
                       Encryption Key
                   </span>
-
                   <div class="badge">
                       ACTIVE
                   </div>
-
               </div>
 
               <div
@@ -221,8 +199,84 @@
               </div>
 
           </div>
-
       </div>
+
+
+      <!-- SAS Verification Panel (shown after exchange) -->
+
+      <div
+          id="sasPanel"
+          class="glass-card sas-panel"
+          style="display: none;"
+      >
+          <div class="section-label">
+              🔑 SAS Verification
+          </div>
+
+          <div class="sas-instruction">
+              Compare this 6-digit code with your partner over a voice call.
+              If they <strong>match</strong>, the key exchange is secure.
+          </div>
+
+          <div
+              id="sasCode"
+              class="sas-code"
+          >
+              ——
+          </div>
+
+          <div
+              id="sasFingerprint"
+              class="sas-fingerprint"
+          >
+              Fingerprint: ——
+          </div>
+
+          <div id="sasWarning" style="display: none;" class="sas-warning">
+              ⚠️ <strong>Key fingerprint changed!</strong> This may be a new device
+              or a potential MITM attack. Verify with your partner before sending
+              sensitive messages.
+          </div>
+
+          <button
+              id="sasVerifiedBtn"
+              class="sas-verified-btn"
+          >
+              ✓ Verified — Both codes match
+          </button>
+
+          <button
+              id="sasDismissBtn"
+              class="sas-dismiss-btn"
+          >
+              Dismiss
+          </button>
+      </div>
+
+
+        <!-- Stale Exchange Warning -->
+
+        <div
+            id="staleWarning"
+            class="glass-card stale-warning"
+            style="display: none;"
+        >
+            <div class="section-label">
+                ⏰ Previous Exchange Expired
+            </div>
+            <div class="stale-text">
+                A previous key exchange in this chat timed out or expired.
+                The waiting state has been cleaned up. You can start a new
+                exchange by clicking the button below.
+            </div>
+            <button
+                id="staleDismissBtn"
+                class="stale-dismiss-btn"
+            >
+                OK
+            </button>
+        </div>
+
 
         <!-- Form -->
 
@@ -253,6 +307,36 @@
                 Exchange Key (Diffie-Hellman)
             </button>
 
+            <button
+                id="clearKeyBtn"
+                class="clear-key-btn"
+            >
+                🗑 Clear Key for This Chat
+            </button>
+        </div>
+
+
+        <!-- Auto-Decrypt Toggle -->
+
+        <div class="glass-card auto-decrypt-card">
+            <div class="auto-decrypt-row">
+                <div class="auto-decrypt-info">
+                    <div class="auto-decrypt-title">
+                        🔓 Auto-Decrypt
+                    </div>
+                    <div class="auto-decrypt-sub">
+                        Decrypt incoming messages automatically
+                    </div>
+                </div>
+
+                <label class="toggle-switch">
+                    <input
+                        type="checkbox"
+                        id="autoDecryptToggle"
+                    />
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
         </div>
 
 
@@ -280,10 +364,8 @@
             </a>
 
         </div>
-
     </div>
 
 </body>
 
 </html>
-

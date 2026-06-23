@@ -26,6 +26,41 @@ async function bale_send_message(text) {
     }
 
     sendButton.click();
+
+    // Clear the input after sending so exchange/SAS messages don't linger
+    // in the field and risk being re-processed or re-sent.
+    setTimeout(() => {
+        input.textContent = "";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+    }, 150);
+}
+
+// Clear the chat input field (used after exchange success / SAS verification).
+function clear_bale_input() {
+    const input = document.querySelector(BALE_CHAT_INPUT);
+    if (!input) {
+        return false;
+    }
+
+    input.textContent = "";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    return true;
+}
+
+// Guard: strip any exchange/SAS text that may have lingered in the input.
+// Called on input changes so a stray "cg-sas|..." never gets sent again.
+function sanitize_bale_input() {
+    const input = document.querySelector(BALE_CHAT_INPUT);
+    if (!input) {
+        return;
+    }
+
+    const text = normalize_message_text(input.textContent ?? "");
+    if (is_exchange_message(text)) {
+        input.textContent = "";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        console.warn("[CipherGap] Stripped lingering exchange text from chat input.");
+    }
 }
 
 function extract_bale_message_text(messageElement) {
@@ -198,33 +233,7 @@ async function handle_decrypt_click(event, messageElement, decryptButton) {
 
     try {
         decryptButton.disabled = true;
-
-        const currentText = extract_cgp_packet_text(messageElement);
-        if (!is_ciphergap_packet(currentText)) {
-            alert("Could not read encrypted message from this bubble.");
-            return;
-        }
-
-        const secretKey = await get_secret_key();
-        if (!secretKey) {
-            alert(
-                "No encryption key set for this chat.\n\n" +
-                "Set a key manually or use Exchange Key in the CipherGap popup."
-            );
-            return;
-        }
-
-        const packet = parse_ciphergap_packet(currentText);
-        if (!packet?.data) {
-            alert("Invalid CipherGap packet format.");
-            return;
-        }
-
-        const decryptedText = await decrypt_message(packet.data, secretKey);
-
-        replace_message_visual(messageElement, currentText, decryptedText);
-        messageElement.dataset.ciphergapDecrypted = "true";
-
+        await decrypt_message_element(messageElement);
         decryptButton.remove();
     } catch (error) {
         console.error("[CipherGap] Decrypt failed:", error);
@@ -232,6 +241,30 @@ async function handle_decrypt_click(event, messageElement, decryptButton) {
     } finally {
         decryptButton.disabled = false;
     }
+}
+
+// Core decryption routine shared by manual click and auto-decrypt.
+// Returns true on success, throws on failure.
+async function decrypt_message_element(messageElement) {
+    const currentText = extract_cgp_packet_text(messageElement);
+    if (!is_ciphergap_packet(currentText)) {
+        throw new Error("Could not read encrypted message from this bubble.");
+    }
+
+    const secretKey = await get_secret_key();
+    if (!secretKey) {
+        throw new Error("No encryption key set for this chat.");
+    }
+
+    const packet = parse_ciphergap_packet(currentText);
+    if (!packet?.data) {
+        throw new Error("Invalid CipherGap packet format.");
+    }
+
+    const decryptedText = await decrypt_message(packet.data, secretKey);
+    replace_message_visual(messageElement, currentText, decryptedText);
+    messageElement.dataset.ciphergapDecrypted = "true";
+    return true;
 }
 
 function process_encrypted_bale_message(messageElement) {
@@ -244,6 +277,23 @@ function process_encrypted_bale_message(messageElement) {
         return;
     }
 
+    messageElement.dataset.ciphergapProcessed = "true";
+
+    // Try auto-decrypt first; fall back to manual Decrypt button if disabled or on failure
+    get_auto_decrypt().then((autoDecrypt) => {
+        if (autoDecrypt) {
+            decrypt_message_element(messageElement).catch((err) => {
+                console.warn("[CipherGap] Auto-decrypt failed, falling back to button:", err);
+                attach_decrypt_button_to(messageElement);
+            });
+        } else {
+            attach_decrypt_button_to(messageElement);
+        }
+    });
+}
+
+// Creates and attaches a manual Decrypt button to a message element.
+function attach_decrypt_button_to(messageElement) {
     const decryptButton = create_decrypt_button();
 
     decryptButton.addEventListener(
@@ -262,9 +312,73 @@ function process_encrypted_bale_message(messageElement) {
 
     try {
         attach_decrypt_button(messageElement, decryptButton);
-        messageElement.dataset.ciphergapProcessed = "true";
     } catch (error) {
         console.error("[CipherGap] Failed to attach decrypt button:", error);
+    }
+}
+
+// When auto-decrypt is enabled, immediately decrypt all currently-visible
+// encrypted messages that haven't been decrypted yet.
+function auto_decrypt_visible_messages() {
+    const scroller = document.querySelector(BALE_MESSAGE_SCROLLER);
+    if (!scroller) {
+        return;
+    }
+
+    scroller.querySelectorAll("[data-sid]").forEach((messageElement) => {
+        if (messageElement.dataset.ciphergapDecrypted === "true") {
+            return;
+        }
+        const text = extract_cgp_packet_text(messageElement);
+        if (!is_ciphergap_packet(text)) {
+            return;
+        }
+        decrypt_message_element(messageElement).catch((err) => {
+            console.warn("[CipherGap] Auto-decrypt failed for a message:", err);
+        });
+    });
+}
+
+// =========================
+// Hide exchange protocol messages
+// =========================
+
+function hide_exchange_protocol_message(messageElement, text) {
+    // Visually minimize the raw exchange start/ack/SAS messages in chat.
+    // They contain sensitive protocol data that users don't need to see raw.
+    const normalized = text.replace(/[\u200B-\u200D\uFEFF]/g, "").replace(/[\r\n]+/g, " ").trim();
+
+    if (/^start exchange (key|ack):/i.test(normalized)) {
+        messageElement.style.opacity = "0.3";
+        messageElement.style.fontSize = "10px";
+        messageElement.style.maxHeight = "20px";
+        messageElement.style.overflow = "hidden";
+        messageElement.style.pointerEvents = "none";
+    }
+
+    // SAS messages get a styled in-chat verification display
+    if (/^cg-sas\|/.test(normalized)) {
+        const parts = normalized.split("|");
+        if (parts.length >= 2) {
+            const sasCode = parts[1];
+            const fingerprint = parts[2] ?? "";
+
+            // Replace all spans with a clean SAS verification display
+            const spans = messageElement.querySelectorAll("span");
+            if (spans.length > 0) {
+                spans.forEach((span) => {
+                    span.textContent = "";
+                });
+                spans[0].innerHTML = `
+                    <span style="display:block;font-size:11px;color:#94a3b8;">🔐 CipherGap SAS Verification</span>
+                    <span style="display:block;font-size:22px;font-weight:700;letter-spacing:6px;color:#4ade80;margin:4px 0;">${sasCode}</span>
+                    ${fingerprint ? `<span style="display:block;font-size:10px;color:#64748b;">Key fingerprint: ${fingerprint}</span>` : ""}
+                `;
+            }
+
+            messageElement.style.borderLeft = "3px solid #4ade80";
+            messageElement.style.paddingLeft = "10px";
+        }
     }
 }
 
@@ -276,6 +390,11 @@ function process_bale_message(messageElement) {
     const text = extract_bale_message_text(messageElement);
     if (!text) {
         return;
+    }
+
+    // Visually hide protocol messages
+    if (is_exchange_message(text)) {
+        hide_exchange_protocol_message(messageElement, text);
     }
 
     if (is_exchange_message(text) && !messageElement.dataset.ciphergapExchangeHandled) {
@@ -306,6 +425,20 @@ function observe_bale_messages() {
 
         clearInterval(interval);
         scan_bale_messages();
+
+        // Attach input sanitizer so lingering exchange text can't be re-sent
+        const chatInput = document.querySelector(BALE_CHAT_INPUT);
+        if (chatInput && !chatInput.dataset.ciphergapSanitized) {
+            chatInput.dataset.ciphergapSanitized = "true";
+            chatInput.addEventListener("input", sanitize_bale_input);
+            chatInput.addEventListener("focus", sanitize_bale_input);
+        }
+
+        // Clean up stale exchange status when entering a chat
+        const storageKey = get_storage_key();
+        cleanup_stale_exchange_status(storageKey).then(() => {
+            console.log("[CipherGap] Stale exchange cleanup checked for", storageKey);
+        }).catch(() => {});
 
         const observer = new MutationObserver((mutations) => {
             for (const mutation of mutations) {
@@ -354,3 +487,28 @@ const bale_adapter = {
 
 register_messenger_adapter("bale", bale_adapter);
 observe_bale_messages();
+
+// Listen for auto-decrypt toggle from the popup so we can immediately
+// decrypt all visible messages when the user enables the feature.
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message.action === "auto_decrypt_sweep") {
+        try {
+            auto_decrypt_visible_messages();
+            sendResponse({ ok: true });
+        } catch (err) {
+            sendResponse({ ok: false, error: err.message });
+        }
+        return false;
+    }
+
+    if (message.action === "clear_input") {
+        // Clear any lingering exchange/SAS text from the chat input.
+        try {
+            const cleared = clear_bale_input();
+            sendResponse({ ok: true, cleared });
+        } catch (err) {
+            sendResponse({ ok: false, error: err.message });
+        }
+        return false;
+    }
+});

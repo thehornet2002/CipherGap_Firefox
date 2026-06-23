@@ -9,6 +9,22 @@ const statusEl = document.getElementById("status");
 const savedState = document.getElementById("savedState");
 const messengerCards = document.querySelectorAll(".messenger-card");
 
+// SAS verification panel
+const sasPanel = document.getElementById("sasPanel");
+const sasCode = document.getElementById("sasCode");
+const sasFingerprint = document.getElementById("sasFingerprint");
+const sasWarning = document.getElementById("sasWarning");
+const sasVerifiedBtn = document.getElementById("sasVerifiedBtn");
+const sasDismissBtn = document.getElementById("sasDismissBtn");
+
+// Stale exchange warning
+const staleWarning = document.getElementById("staleWarning");
+const staleDismissBtn = document.getElementById("staleDismissBtn");
+
+// Clear key + auto-decrypt
+const clearKeyBtn = document.getElementById("clearKeyBtn");
+const autoDecryptToggle = document.getElementById("autoDecryptToggle");
+
 const supportedHosts = [
     "web.rubika.ir",
     "web.splus.ir",
@@ -40,7 +56,9 @@ async function init() {
     validate_supported_host();
     update_current_chat_ui();
     update_messenger_tabs();
+    await check_stale_exchange();
     await load_saved_key();
+    await load_auto_decrypt();
 }
 
 function update_current_chat_ui() {
@@ -92,6 +110,90 @@ function validate_supported_host() {
     return true;
 }
 
+// =========================
+// Stale exchange detection
+// =========================
+
+async function check_stale_exchange() {
+    if (!currentChatId) {
+        return;
+    }
+
+    const statusKey = `exchange_status_${storageKey}`;
+    const result = await chrome.storage.local.get([statusKey]);
+    const entry = result[statusKey];
+
+    if (!entry) {
+        return;
+    }
+
+    const age = Date.now() - entry.at;
+    const EXCHANGE_STATUS_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes — must match storage.js
+
+    // Still "waiting" and expired — show warning and clean up
+    if (entry.status === "waiting" && age > EXCHANGE_STATUS_EXPIRY_MS) {
+        await chrome.storage.local.remove(statusKey);
+        show_stale_warning();
+        return;
+    }
+
+    // "complete" but old — clean up silently, show SAS if available
+    if (entry.status === "complete" && age > EXCHANGE_STATUS_EXPIRY_MS) {
+        // Keep the key but remove the exchange status
+        await chrome.storage.local.remove(statusKey);
+        return;
+    }
+
+    // Exchange is "complete" and still fresh — show SAS verification panel
+    if (entry.status === "complete" && entry.sas) {
+        show_sas_panel(entry.sas, entry.fingerprint, entry.fingerprintWarning);
+    }
+}
+
+function show_stale_warning() {
+    staleWarning.style.display = "block";
+}
+
+staleDismissBtn.addEventListener("click", () => {
+    staleWarning.style.display = "none";
+});
+
+// =========================
+// SAS verification panel
+// =========================
+
+function show_sas_panel(sas, fingerprint, fingerprintWarning) {
+    sasCode.textContent = sas;
+    sasFingerprint.textContent = fingerprint
+        ? `Fingerprint: ${fingerprint}`
+        : "";
+    sasPanel.style.display = "block";
+
+    if (fingerprintWarning) {
+        sasWarning.style.display = "block";
+    } else {
+        sasWarning.style.display = "none";
+    }
+}
+
+function hide_sas_panel() {
+    sasPanel.style.display = "none";
+}
+
+sasVerifiedBtn.addEventListener("click", () => {
+    hide_sas_panel();
+    statusEl.innerText = "✅ Key verified — SAS codes matched";
+    statusEl.style.color = "#4ade80";
+});
+
+sasDismissBtn.addEventListener("click", () => {
+    hide_sas_panel();
+});
+
+// =========================
+// Load saved key
+// =========================
+
 async function load_saved_key() {
     const result = await chrome.storage.local.get([storageKey]);
     const savedKey = result[storageKey];
@@ -101,11 +203,17 @@ async function load_saved_key() {
         savedKeyEl.innerText = savedKey;
         secretKeyInput.value = savedKey;
         statusEl.innerText = "🔐 Encryption active";
+        statusEl.style.color = "#4ade80";
     } else {
         savedState.style.display = "none";
         statusEl.innerText = "⚠️ No key configured";
+        statusEl.style.color = "#fbbf24";
     }
 }
+
+// =========================
+// Save key
+// =========================
 
 saveBtn.addEventListener("click", async () => {
     if (!validate_supported_host()) {
@@ -115,6 +223,7 @@ saveBtn.addEventListener("click", async () => {
     const key = secretKeyInput.value.trim();
     if (!key) {
         statusEl.innerText = "❌ Please enter a key";
+        statusEl.style.color = "#f87171";
         return;
     }
 
@@ -123,7 +232,91 @@ saveBtn.addEventListener("click", async () => {
     savedKeyEl.innerText = key;
     savedState.style.display = "block";
     statusEl.innerText = "✅ Key saved successfully";
+    statusEl.style.color = "#4ade80";
 });
+
+// =========================
+// Clear key
+// =========================
+
+clearKeyBtn.addEventListener("click", async () => {
+    const confirmClear = confirm(
+        "Clear the encryption key for this chat?\n\n" +
+        "You will not be able to read or send encrypted messages until you set a new key or run a new exchange."
+    );
+    if (!confirmClear) {
+        return;
+    }
+
+    try {
+        const response = await chrome.tabs.sendMessage(activeTabId, { action: "clear_key" });
+        if (!response?.ok) {
+            throw new Error(response?.error ?? "Failed to clear key.");
+        }
+
+        savedState.style.display = "none";
+        secretKeyInput.value = "";
+        hide_sas_panel();
+        staleWarning.style.display = "none";
+
+        statusEl.innerText = "🗑 Key cleared for this chat";
+        statusEl.style.color = "#fbbf24";
+    } catch (error) {
+        console.error("[CipherGap] Clear key failed:", error);
+        statusEl.innerText = `❌ ${error.message}`;
+        statusEl.style.color = "#f87171";
+    }
+});
+
+// =========================
+// Auto-decrypt
+// =========================
+
+async function load_auto_decrypt() {
+    try {
+        const response = await chrome.tabs.sendMessage(activeTabId, { action: "get_auto_decrypt" });
+        if (response?.ok) {
+            autoDecryptToggle.checked = Boolean(response.enabled);
+        }
+    } catch (error) {
+        // Content script may not be ready yet; default to off
+        autoDecryptToggle.checked = false;
+    }
+}
+
+autoDecryptToggle.addEventListener("change", async () => {
+    const enabled = autoDecryptToggle.checked;
+
+    try {
+        const response = await chrome.tabs.sendMessage(activeTabId, {
+            action: "set_auto_decrypt",
+            enabled
+        });
+        if (!response?.ok) {
+            throw new Error(response?.error ?? "Failed to save auto-decrypt setting.");
+        }
+
+        // If just enabled, sweep all currently-visible messages
+        if (enabled) {
+            await chrome.tabs.sendMessage(activeTabId, { action: "auto_decrypt_sweep" }).catch(() => {});
+        }
+
+        statusEl.innerText = enabled
+            ? "🔓 Auto-decrypt enabled for this chat"
+            : "🔒 Auto-decrypt disabled";
+        statusEl.style.color = enabled ? "#4ade80" : "#94a3b8";
+    } catch (error) {
+        console.error("[CipherGap] Auto-decrypt toggle failed:", error);
+        // Revert toggle on failure
+        autoDecryptToggle.checked = !enabled;
+        statusEl.innerText = `❌ ${error.message}`;
+        statusEl.style.color = "#f87171";
+    }
+});
+
+// =========================
+// Exchange key (DH)
+// =========================
 
 exchangeBtn.addEventListener("click", async () => {
     if (!validate_supported_host()) {
@@ -132,6 +325,7 @@ exchangeBtn.addEventListener("click", async () => {
 
     if (!currentChatId) {
         statusEl.innerText = "❌ Open a chat before exchanging keys";
+        statusEl.style.color = "#f87171";
         return;
     }
 
@@ -147,6 +341,7 @@ exchangeBtn.addEventListener("click", async () => {
 
     exchangeBtn.disabled = true;
     statusEl.innerText = "⏳ Starting key exchange…";
+    statusEl.style.color = "#fbbf24";
 
     try {
         const response = await chrome.tabs.sendMessage(activeTabId, {
@@ -159,15 +354,24 @@ exchangeBtn.addEventListener("click", async () => {
 
         statusEl.innerText = "⏳ Waiting for partner to acknowledge…";
 
-        const exchangedKey = await wait_for_exchange_complete(storageKey);
+        const result = await wait_for_exchange_complete(storageKey);
 
-        savedKeyEl.innerText = exchangedKey;
-        secretKeyInput.value = exchangedKey;
+        savedKeyEl.innerText = result.key;
+        secretKeyInput.value = result.key;
         savedState.style.display = "block";
-        statusEl.innerText = "✅ Key exchanged and saved for this chat";
+
+        if (result.sas) {
+            show_sas_panel(result.sas, result.fingerprint, result.fingerprintWarning);
+            statusEl.innerText = "✅ Key exchanged — verify the SAS code with your partner";
+            statusEl.style.color = "#fbbf24";
+        } else {
+            statusEl.innerText = "✅ Key exchanged and saved for this chat";
+            statusEl.style.color = "#4ade80";
+        }
     } catch (error) {
         console.error("[CipherGap] Exchange failed:", error);
         statusEl.innerText = `❌ ${error.message}`;
+        statusEl.style.color = "#f87171";
     } finally {
         exchangeBtn.disabled = !currentChatId;
     }
@@ -184,12 +388,19 @@ function wait_for_exchange_complete(key, timeoutMs = 60000) {
 
             if (result[key] && exchangeStatus?.status === "complete") {
                 clearInterval(interval);
-                resolve(result[key]);
+                resolve({
+                    key: result[key],
+                    sas: exchangeStatus.sas ?? null,
+                    fingerprint: exchangeStatus.fingerprint ?? null,
+                    fingerprintWarning: exchangeStatus.fingerprintWarning ?? false
+                });
                 return;
             }
 
             if (Date.now() - startedAt > timeoutMs) {
                 clearInterval(interval);
+                // Clean up the stale waiting status
+                chrome.storage.local.remove(statusKey).catch(() => {});
                 reject(new Error("Key exchange timed out. Ask your partner to open the chat with CipherGap active."));
             }
         }, 500);
