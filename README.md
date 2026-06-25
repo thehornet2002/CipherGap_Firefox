@@ -1,6 +1,6 @@
 # CipherGap 🔒
 
-**CipherGap** is an open-source Chrome extension that adds client-side encryption to popular Iranian web messengers, including **Eitaa**, **Rubika**, and **Bale**.
+**CipherGap** is an open-source Firefox extension that adds client-side encryption to popular Iranian web messengers, including **Eitaa**, **Rubika**, and **Bale**.
 
 Messages are encrypted locally in your browser before being sent, ensuring that only users with the shared secret can read the original content.
 
@@ -9,24 +9,31 @@ Messages are encrypted locally in your browser before being sent, ensuring that 
 * 🔐 Client-side message encryption
 * ⚡ AES-based symmetric cryptography
 * 🌐 Supports Eitaa, Rubika, and Bale Web
-* 🧩 Lightweight Chrome Extension (Manifest V3)
+* 🧩 Lightweight Firefox WebExtension
 * 🔍 Fully open source and auditable
 * 🚫 No external servers or cloud processing
 
 ## Installation
 
-### Manual Installation
+### Manual Installation for Development / Testing
 
 ```bash
 git clone https://github.com/alisharify7/CipherGap.git
 ```
 
-1. Open `chrome://extensions`
-2. Enable **Developer Mode**
-3. Click **Load unpacked**
-4. Select the cloned `CipherGap` directory
+1. Open Firefox.
+2. Go to:
 
-The extension is now ready to use.
+```text
+about:debugging#/runtime/this-firefox
+```
+
+3. Click **Load Temporary Add-on**.
+4. Select the `manifest.json` file inside the cloned `CipherGap` directory.
+
+The extension is now ready to use in Firefox.
+
+> Note: Temporary add-ons are removed when Firefox is restarted. For permanent installation, the extension must be packaged and signed through Mozilla Add-ons.
 
 ## Usage
 
@@ -40,7 +47,7 @@ The extension is now ready to use.
 
 * JavaScript
 * HTML/CSS
-* Chrome Extensions API (Manifest V3)
+* Firefox WebExtensions API
 * AES Encryption
 
 ## Security
@@ -66,8 +73,6 @@ Released under the MIT License.
 ---
 
 ⭐ If you find CipherGap useful, consider starring the repository.
-
-
 
 <img src="./docs/ext.png">
 <img src="./docs/chat.png">
