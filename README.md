@@ -18,7 +18,7 @@ Messages are encrypted locally in your browser before being sent, ensuring that 
 ### Manual Installation for Development / Testing
 
 ```bash
-git clone https://github.com/alisharify7/CipherGap.git
+git clone https://github.com/thehornet2002/CipherGap_Firefox.git
 ```
 
 1. Open Firefox.
